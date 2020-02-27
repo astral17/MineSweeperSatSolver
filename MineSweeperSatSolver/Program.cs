@@ -1,265 +1,37 @@
 ﻿using System;
-using System.Linq;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.Runtime.InteropServices;
 using WindowsInput;
-using Google.OrTools.Sat;
 
-namespace MineSwepperSatSolver
+namespace MineSweeperSatSolver
 {
     internal class Program
     {
         private static readonly Random random = new Random();
 
-        private class Solutions
-        {
-            public IntVar[,] Variables;
-            public long TotalSolutions;
-            public long[,] MineHits;
-        }
-
-        private class MinesweeperSolutionCallback : CpSolverSolutionCallback
-        {
-            private readonly Solutions solutions;
-
-            public MinesweeperSolutionCallback(Solutions solutions)
-            {
-                this.solutions = solutions ?? throw new ArgumentNullException(nameof(solutions));
-            }
-
-            public override void OnSolutionCallback()
-            {
-                solutions.TotalSolutions++;
-                for (var x = 0; x < solutions.Variables.GetLength(0); x++)
-                    for (var y = 0; y < solutions.Variables.GetLength(1); y++)
-                    {
-                        if (solutions.Variables[x, y] != null)
-                            solutions.MineHits[x, y] += Value(solutions.Variables[x, y]);
-                    }
-            }
-        }
-
         private static void Main(string[] args)
         {
-            var game = new WindowsXpMineswepper();
+            //UniversalMinesweeper.FindPattern("cells");
+            //return;
+            var game = new WindowsXpMinesweeper();
+            //var game = new UniversalMinesweeper();
+            var solver = new MixedSolver();
 
             game.Reset();
 
             while (true)
             {
-                var state = game.FetchState();
-
-                while (!game.IsDead(state) && !game.IsReady(state))
+                while (game.FetchState() && !game.IsDead() && !game.IsReady())
                 {
-                    state = game.FetchState();
-
-                    var field = game.GetField(state);
-
-                    var width = field.GetLength(0);
-                    var height = field.GetLength(1);
-
-                    var solutions = new Solutions
+                    if (!solver.Solve(game))
                     {
-                        MineHits = new long[width, height],
-                        Variables = new IntVar[width, height]
-                    };
-
-                    var changed = false;
-
-                    for (var x = 0; x < width; x++)
-                        for (var y = 0; y < height; y++)
-                        {
-                            if (field[x, y].State != CellState.Opened)
-                                continue;
-                            if (field[x, y].MinesAround == 0)
-                                continue;
-
-                            var minesAround = field[x, y].MinesAround;
-                            var closedAround = 0;
-
-                            for (var offsetX = -1; offsetX <= 1; offsetX++)
-                                for (var offsetY = -1; offsetY <= 1; offsetY++)
-                                {
-                                    if (offsetX == 0 && offsetY == 0)
-                                        continue;
-                                    if (offsetX + x < 0 || offsetX + x >= width || offsetY + y < 0 || offsetY + y >= height)
-                                        continue;
-                                    if (field[offsetX + x, offsetY + y].State == CellState.Closed)
-                                        closedAround++;
-                                    if (field[offsetX + x, offsetY + y].State == CellState.Marked)
-                                        minesAround--;
-                                }
-
-                            if (minesAround == 0)
-                            {
-                                for (var offsetX = -1; offsetX <= 1; offsetX++)
-                                    for (var offsetY = -1; offsetY <= 1; offsetY++)
-                                    {
-                                        if (offsetX == 0 && offsetY == 0)
-                                            continue;
-                                        if (offsetX + x < 0 || offsetX + x >= width || offsetY + y < 0 ||
-                                            offsetY + y >= height)
-                                            continue;
-                                        if (field[offsetX + x, offsetY + y].State != CellState.Closed) 
-                                            continue;
-                                        game.Click(offsetX + x, offsetY + y);
-                                        field[offsetX + x, offsetY + y].State = CellState.Question;
-                                        changed = true;
-                                    }
-                                continue;
-                            }
-
-                            if (minesAround != closedAround)
-                                continue;
-
-                            for (var offsetX = -1; offsetX <= 1; offsetX++)
-                                for (var offsetY = -1; offsetY <= 1; offsetY++)
-                                {
-                                    if (offsetX == 0 && offsetY == 0)
-                                        continue;
-                                    if (offsetX + x < 0 || offsetX + x >= width || offsetY + y < 0 || offsetY + y >= height)
-                                        continue;
-                                    if (field[offsetX + x, offsetY + y].State != CellState.Closed) 
-                                        continue;
-                                    game.Mark(offsetX + x, offsetY + y);
-                                    field[offsetX + x, offsetY + y].State = CellState.Marked;
-                                    changed = true;
-                                }
-                        }
-
-                    if (changed)
-                    {
-                        Console.WriteLine("Simple");
-                        continue;
+                        throw new Exception("no mines was clicked");
                     }
-
-                    Console.WriteLine("Intellectual");
-
-                    var model = new CpModel();
-                    var equations = 0;
-                    for (var x = 0; x < width; x++)
-                        for (var y = 0; y < height; y++)
-                        {
-                            if (field[x, y].State != CellState.Opened) 
-                                continue;
-                            if (field[x, y].MinesAround == 0)
-                                continue;
-
-                            LinearExpr cellEquation = null;
-                            var minesAround = field[x, y].MinesAround;
-
-                            for (var offsetX = -1; offsetX <= 1; offsetX++)
-                                for (var offsetY = -1; offsetY <= 1; offsetY++)
-                                {
-                                    if (offsetX == 0 && offsetY == 0)
-                                        continue;
-                                    if (offsetX + x < 0 || offsetX + x >= width || offsetY + y < 0 || offsetY + y >= height)
-                                        continue;
-                                    if (field[offsetX + x, offsetY + y].State == CellState.Closed)
-                                    {
-                                        var currentCellKey = $"{offsetX + x}:{offsetY + y}";
-                                        if (solutions.Variables[offsetX + x, offsetY + y] == null)
-                                            solutions.Variables[offsetX + x, offsetY + y] =
-                                                model.NewIntVar(0, 1, currentCellKey);
-
-                                        if (cellEquation == null)
-                                            cellEquation = solutions.Variables[offsetX + x, offsetY + y];
-                                        else
-                                            cellEquation += solutions.Variables[offsetX + x, offsetY + y];
-                                    }
-
-                                    if (field[offsetX + x, offsetY + y].State == CellState.Marked)
-                                        minesAround--;
-                                }
-
-                            if (cellEquation == null)
-                                continue;
-                            model.Add(cellEquation == minesAround);
-                            equations++;
-                        }
-
-                    var solver = new CpSolver();
-                    {
-                        var variables = 0;
-                        for (var x = 0; x < width; x++)
-                            for (var y = 0; y < height; y++)
-                            {
-                                variables += solutions.Variables[x, y] != null ? 1 : 0;
-                            }
-
-                        Console.Write($"Variables: {variables}, Equations: {equations}, Result: ");
-                        Console.Out.Flush();
-                    }
-                    var stopwatch = new Stopwatch();
-                    stopwatch.Start();
-                    Console.Write(solver.SearchAllSolutions(model, new MinesweeperSolutionCallback(solutions)));
-                    stopwatch.Stop();
-                    Console.WriteLine($", Time consumed: {stopwatch.ElapsedMilliseconds} ms");
-
-                    var wasChanged = false;
-
-                    for (var x = 0; x < width; x++)
-                        for (var y = 0; y < height; y++)
-                        {
-                            if (solutions.Variables[x, y] == null)
-                                continue;
-                            if (solutions.MineHits[x, y] == 0)
-                            {
-                                game.Click(x, y);
-                                wasChanged = true;
-                            }
-
-                            if (solutions.MineHits[x, y] != solutions.TotalSolutions) 
-                                continue;
-
-                            game.Mark(x, y);
-                            wasChanged = true;
-                        }
-
-                    if (wasChanged)
-                        continue;
-
-                    var minimalPoint = new Point(-1, -1);
-
-                    for (var y = 0; y < height; y++)
-                    {
-                        for (var x = 0; x < width; x++)
-                        {
-                            if (solutions.Variables[x, y] == null) 
-                                continue;
-                            if (minimalPoint.X == -1 || solutions.MineHits[minimalPoint.X, minimalPoint.Y] >
-                                solutions.MineHits[x, y])
-                                minimalPoint = new Point(x, y);
-                        }
-                    }
-
-                    if (minimalPoint.X != -1)
-                        Console.WriteLine(
-                            $"Chance hit at {minimalPoint.X}:{minimalPoint.Y} {100.0 * solutions.MineHits[minimalPoint.X, minimalPoint.Y] / solutions.TotalSolutions:0.00}%");
-
-                    if (minimalPoint.X == -1)
-                    {
-                        var possiblePoints = new List<Point>();
-                        for (var x = 0; x < width; x++)
-                            for (var y = 0; y < height; y++)
-                            {
-                                if (field[x, y].State == CellState.Closed)
-                                    possiblePoints.Add(new Point(x, y));
-                            }
-
-                        if (!possiblePoints.Any())
-                            continue;
-
-                        var point = possiblePoints[random.Next(possiblePoints.Count)];
-                        game.Click(point.X, point.Y);
-                    } 
-                    else
-                        game.Click(minimalPoint.X, minimalPoint.Y);
                 }
 
-                if (game.IsReady(state))
+                if (game.IsReady())
                     break;
 
                 game.Reset();
@@ -281,7 +53,7 @@ namespace MineSwepperSatSolver
         }
     }
 
-    internal enum CellState
+    internal enum CellState // Mb remove unuseful states
     {
         Closed,
         Opened,
@@ -293,7 +65,7 @@ namespace MineSwepperSatSolver
         Question
     }
 
-    internal struct MineswepperCell
+    internal struct MinesweeperCell
     {        
         public CellState State { get; set; }
 
@@ -302,15 +74,17 @@ namespace MineSwepperSatSolver
         public override string ToString() => $"{nameof(State)}: {State}, {nameof(MinesAround)}: {MinesAround}";
     }
 
-    internal interface IMineswepper<T>
+    internal interface IMinesweeper // TODO: Move to other file
     {
-        MineswepperCell[,] GetField(T state);
+        MinesweeperCell[,] GetField();
 
-        T FetchState();
+        bool FetchState();
 
-        bool IsDead(T state);
+        //TODO: int TotalMines();
 
-        bool IsReady(T state);
+        bool IsDead();
+
+        bool IsReady(); // IsSolved
 
         void Click(int x, int y);
 
@@ -319,45 +93,15 @@ namespace MineSwepperSatSolver
         void Reset();
     }
 
-    internal class WindowsXpMineswepper : IMineswepper<Bitmap>
+    internal class WindowsXpMinesweeper : IMinesweeper
     {
         private readonly IntPtr windowHandle;
 
         private readonly InputSimulator inputSimulator = new InputSimulator();
 
-        [DllImport("user32.dll")]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool GetClientRect(IntPtr hWnd, out Rect lpRect);
-        
-        [DllImport("user32.dll", ExactSpelling = true, CharSet = CharSet.Auto)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool SetForegroundWindow(IntPtr hWnd);
+        public Bitmap windowScreenShot = null;
 
-        [DllImport("user32.dll")]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool ClientToScreen(IntPtr hWnd, ref Point lpPoint);
-
-        [DllImport("user32.dll")]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool SetCursorPos(int x, int y);
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct Rect
-        {
-            public int Left;
-            public int Top;
-            public int Right;
-            public int Bottom;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct Point
-        {
-            public int X;
-            public int Y;
-        }
-
-        public WindowsXpMineswepper()
+        public WindowsXpMinesweeper()
         {
             var foundWindowHandle = IntPtr.Zero;
 
@@ -372,41 +116,39 @@ namespace MineSwepperSatSolver
             if (foundWindowHandle == IntPtr.Zero)
                 throw new Exception("Minesweeper window wasn't found");
 
-            if (!SetForegroundWindow(foundWindowHandle))
+            if (!WinApi.SetForegroundWindow(foundWindowHandle))
                 throw new Exception("Could not set foreground window");
             windowHandle = foundWindowHandle;
         }
 
-        public Bitmap FetchState()
+        public bool FetchState()
         {
-            if (!SetForegroundWindow(windowHandle))
+            if (!WinApi.SetForegroundWindow(windowHandle))
                 throw new Exception("Could not set foreground window");
-            if (!GetClientRect(windowHandle, out var rect))
+            if (!WinApi.GetClientRect(windowHandle, out var rect))
                 throw new Exception("Could not get window rect");
-            var point = new Point
+            var point = new WinApi.Point
             {
                 X = rect.Left,
                 Y = rect.Top
             };
-            if (!ClientToScreen(windowHandle, ref point))
+            if (!WinApi.ClientToScreen(windowHandle, ref point))
                 throw new Exception("Could not get client point");
 
-            var windowScreenShot =
+            windowScreenShot =
                 new Bitmap(rect.Right - rect.Left, rect.Bottom - rect.Top);
             using var screenGraphics = Graphics.FromImage(windowScreenShot);
 
             screenGraphics.CopyFromScreen(point.X, point.Y,
                 0, 0, new Size(windowScreenShot.Width, windowScreenShot.Height),
                 CopyPixelOperation.SourceCopy);
-
-            windowScreenShot.Save("temp.png");
-
-            return windowScreenShot;
+            //windowScreenShot.Save("temp.png");
+            return true;
         }
 
-        private static MineswepperCell ParseCell(int cellHash)
+        private static MinesweeperCell ParseCell(int cellHash)
         {
-            var cell = new MineswepperCell();
+            var cell = new MinesweeperCell();
             
             switch (cellHash)
             {
@@ -474,11 +216,9 @@ namespace MineSwepperSatSolver
             return cell;
         }
 
-        public MineswepperCell[,] GetField(Bitmap state)
+        public MinesweeperCell[,] GetField()
         {
-            var windowScreenShot = state;
-
-            var cells = new MineswepperCell[(windowScreenShot.Width - 20) / 16,
+            var cells = new MinesweeperCell[(windowScreenShot.Width - 20) / 16,
                 (windowScreenShot.Height - 63) / 16];
 
             var imageData = new byte[sizeof(byte) * 3 * windowScreenShot.Width * windowScreenShot.Height];
@@ -512,69 +252,356 @@ namespace MineSwepperSatSolver
             return cells;
         }
 
-        public bool IsDead(Bitmap state)
+        public bool IsDead()
         {
-            var windowScreenShot = FetchState();
-            return state.GetPixel(windowScreenShot.Width / 2, 24).R == 0;
+            return windowScreenShot.GetPixel(windowScreenShot.Width / 2, 24).R == 0;
         }
 
-        public bool IsReady(Bitmap state)
+        public bool IsReady()
         {
-            var windowScreenShot = FetchState();
-            return state.GetPixel(windowScreenShot.Width / 2 - 5, 28).R == 0;
+            return windowScreenShot.GetPixel(windowScreenShot.Width / 2 - 5, 28).R == 0;
         }
 
         public void Click(int x, int y)
         {
-            if (!SetForegroundWindow(windowHandle))
+            if (!WinApi.SetForegroundWindow(windowHandle))
                 throw new Exception("Could not set foreground window");
-            if (!GetClientRect(windowHandle, out var rect))
+            if (!WinApi.GetClientRect(windowHandle, out var rect))
                 throw new Exception("Could not get window rect");
-            var point = new Point
+            var point = new WinApi.Point
             {
                 X = rect.Left,
                 Y = rect.Top
             };
-            if (!ClientToScreen(windowHandle, ref point))
+            if (!WinApi.ClientToScreen(windowHandle, ref point))
                 throw new Exception("Could not get client point");
-            SetCursorPos(point.X + 12 + x * 16 + 8, 
+            WinApi.SetCursorPos(point.X + 12 + x * 16 + 8, 
                 point.Y + 55 + y * 16 + 8);
             inputSimulator.Mouse.LeftButtonClick();
         }
 
         public void Mark(int x, int y)
         {
-            if (!SetForegroundWindow(windowHandle))
+            if (!WinApi.SetForegroundWindow(windowHandle))
                 throw new Exception("Could not set foreground window");
-            if (!GetClientRect(windowHandle, out var rect))
+            if (!WinApi.GetClientRect(windowHandle, out var rect))
                 throw new Exception("Could not get window rect");
-            var point = new Point
+            var point = new WinApi.Point
             {
                 X = rect.Left,
                 Y = rect.Top
             };
-            if (!ClientToScreen(windowHandle, ref point))
+            if (!WinApi.ClientToScreen(windowHandle, ref point))
                 throw new Exception("Could not get client point");
-            SetCursorPos(point.X + 12 + x * 16 + 8,
+            WinApi.SetCursorPos(point.X + 12 + x * 16 + 8,
                 point.Y + 55 + y * 16 + 8);
             inputSimulator.Mouse.RightButtonClick();
         }
 
         public void Reset()
         {
-            if (!SetForegroundWindow(windowHandle))
+            if (!WinApi.SetForegroundWindow(windowHandle))
                 throw new Exception("Could not set foreground window");
-            if (!GetClientRect(windowHandle, out var rect))
+            if (!WinApi.GetClientRect(windowHandle, out var rect))
                 throw new Exception("Could not get window rect");
-            var point = new Point
+            var point = new WinApi.Point
             {
                 X = rect.Left,
                 Y = rect.Top
             };
-            if (!ClientToScreen(windowHandle, ref point))
+            if (!WinApi.ClientToScreen(windowHandle, ref point))
                 throw new Exception("Could not get client point");
-            SetCursorPos(point.X + (rect.Right - rect.Left) / 2, point.Y + 28);
+            WinApi.SetCursorPos(point.X + (rect.Right - rect.Left) / 2, point.Y + 28);
             inputSimulator.Mouse.LeftButtonClick();
+        }
+    }
+
+    internal class UniversalMinesweeper : IMinesweeper
+    {
+        private readonly InputSimulator inputSimulator = new InputSimulator();
+
+        public Bitmap windowScreenShot = null;
+        private static int cellSize = 16; // TODO: remove static and load from config file
+        private static int width = 30;
+        private static int height = 16;
+
+        private static int offsetX = 8; // from left top rect to first pixel of field
+        private static int offsetY = 50;
+
+        private WinApi.Point point = new WinApi.Point { X = 660, Y = 259 };
+        //private WinApi.Point point = new WinApi.Point { X = 713, Y = 97 };
+        //private WinApi.Point point = new WinApi.Point { X = 703, Y = 97 };
+        private WinApi.Rect rect = new WinApi.Rect { Left = 0, Top = 0, Right = width * cellSize + offsetX, Bottom = height * cellSize + offsetY };
+        public UniversalMinesweeper() // TODO: constructor from file
+        {
+            
+        }
+
+        public bool FetchState()
+        {
+
+            windowScreenShot = new Bitmap(rect.Right - rect.Left, rect.Bottom - rect.Top);
+            using var screenGraphics = Graphics.FromImage(windowScreenShot);
+
+            screenGraphics.CopyFromScreen(point.X, point.Y,
+                0, 0, new Size(windowScreenShot.Width, windowScreenShot.Height),
+                CopyPixelOperation.SourceCopy);
+            windowScreenShot.Save("temp.png"); // Debug only
+            return true;
+        }
+        public static void FindPattern(string path) // Not Ready
+        {
+            //Bitmap saved = null;
+            //bool[,] good = null;
+            //foreach (string name in System.IO.Directory.GetFiles(path))
+            //{
+            //Bitmap bitmap = new Bitmap(Image.FromFile(name));
+            //if (saved == null)
+            //{
+            //    saved = bitmap;
+            //    good = new bool[bitmap.Width, bitmap.Height];
+            //    for (int x = 0; x < bitmap.Width; x++)
+            //        for (int y = 0; y < bitmap.Height; y++)
+            //            good[x, y] = true;
+            //    continue;
+            //}
+            //for (int x = 0; x < bitmap.Width; x++)
+            //    for (int y = 0; y < bitmap.Height; y++)
+            //    {
+            //if (saved.GetPixel(x, y) != bitmap.GetPixel(x, y))
+            //    good[x, y] = false;
+
+            //        }
+            //}
+            //int ans = 0;
+            //for (int x = 0; x < saved.Width; x++)
+            //    for (int y = 0; y < saved.Height; y++)
+            //    {
+            //        if (good[x, y])
+            //            ans++;
+            //    }
+            //Console.WriteLine($"Count: {ans}/{saved.Width * saved.Height}");
+            List<HashSet<Color>> list = new List<HashSet<Color>>();
+            foreach (string dir in System.IO.Directory.GetDirectories(path))
+            {
+                HashSet<Color> rColors = null;
+                foreach (string filename in System.IO.Directory.GetFiles(dir))
+                {
+                    Bitmap bitmap = new Bitmap(Image.FromFile(filename));
+                    HashSet<Color> colors = new HashSet<Color>();
+                    for (int x = 0; x < bitmap.Width; x++)
+                        for (int y = 0; y < bitmap.Height; y++)
+                            colors.Add(bitmap.GetPixel(x, y));
+                    if (rColors == null)
+                        rColors = colors;
+                    else
+                        rColors.IntersectWith(colors);
+                }
+                list.Add(rColors);
+            }
+            List<HashSet<Color>> result = new List<HashSet<Color>>();
+            for (int i = 0; i < list.Count; i++)
+            {
+                HashSet<Color> cur = new HashSet<Color>(list[i]);
+                Console.WriteLine($"i = {i}, BSize = {cur.Count}");
+                for (int j = 0; j < list.Count; j++)
+                    if (i != j)
+                        cur.ExceptWith(list[j]);
+                result.Add(cur);
+                Console.WriteLine($"i = {i}, ASize = {cur.Count}");
+            }
+        }
+        private static MinesweeperCell ParseCell(int cellHash) // TODO: Remove
+        {
+            var cell = new MinesweeperCell();
+
+            switch (cellHash)
+            {
+                case 560552706:
+                case 869293688:
+                    cell.State = CellState.Closed;
+                    break;
+                case -91164671:
+                case 969498094:
+                    cell.State = CellState.Marked;
+                    break;
+                case -194541566:
+                    cell.State = CellState.QuestionMarked;
+                    break;
+                case -1208559324:
+                case 1608391983:
+                    cell.State = CellState.BlownMine;
+                    break;
+                case -1103832863:
+                    cell.State = CellState.NoMine;
+                    break;
+                case -1668850496:
+                    cell.State = CellState.Mine;
+                    break;
+                case -1887492416:
+                    cell.State = CellState.Question;
+                    break;
+                case 2067284928:
+                    cell.State = CellState.Opened;
+                    cell.MinesAround = 8;
+                    break;
+                case 1275880384:
+                    cell.State = CellState.Opened;
+                    cell.MinesAround = 7;
+                    break;
+                case 139654080:
+                    cell.State = CellState.Opened;
+                    cell.MinesAround = 6;
+                    break;
+                case 792206272:
+                case 683720862:
+                    cell.State = CellState.Opened;
+                    cell.MinesAround = 5;
+                    break;
+                case -1475292224:
+                case -1926047138:
+                    cell.State = CellState.Opened;
+                    cell.MinesAround = 4;
+                    break;
+                case -1079452576:
+                case 1693587486:
+                    cell.State = CellState.Opened;
+                    cell.MinesAround = 3;
+                    break;
+                case -1150141824:
+                case 1763429158:
+                    cell.State = CellState.Opened;
+                    cell.MinesAround = 2;
+                    break;
+                case 607173218:
+                case -2143063590:
+                case 1999011529:
+                case -795896909:
+                case -952361618:
+                    cell.State = CellState.Opened;
+                    cell.MinesAround = 1;
+                    break;
+                case -2009844800:
+                case -140630690:
+                case 1446996886:
+                    cell.State = CellState.Opened;
+                    cell.MinesAround = 0;
+                    break;
+                default:
+                    throw new Exception($"Unknown cell hash: {cellHash}");
+            }
+
+            return cell;
+        }
+
+        public MinesweeperCell[,] GetField()
+        {
+            var cells = new MinesweeperCell[width, height];
+
+            var imageData = new byte[sizeof(byte) * 3 * windowScreenShot.Width * windowScreenShot.Height];
+            var bitmapData = windowScreenShot.LockBits(new Rectangle(0, 0, windowScreenShot.Width, windowScreenShot.Height),
+                System.Drawing.Imaging.ImageLockMode.ReadOnly,
+                System.Drawing.Imaging.PixelFormat.Format24bppRgb);
+            Marshal.Copy(bitmapData.Scan0, imageData, 0, imageData.Length);
+            windowScreenShot.UnlockBits(bitmapData);
+
+            //var width = cells.GetLength(0);
+            //var height = cells.GetLength(1);
+            //Bitmap textures = new Bitmap(Image.FromFile("410.bmp"));
+            //int texCount = textures.Height / cellSize;
+            for (var x = 0; x < width; x++)
+                for (var y = 0; y < height; y++)
+                {
+                    var cellHash = 0;
+                    //int[] diffs = new int[texCount];
+                    for (var cellX = 0; cellX < cellSize; cellX++)
+                        for (var cellY = 0; cellY < cellSize; cellY++)
+                        {
+                            cellHash = 31 * cellHash + imageData[(offsetX + x * cellSize + cellX + (offsetY + y * cellSize + cellY)
+                                                                  * bitmapData.Width) * 3];
+                            cellHash = 31 * cellHash + imageData[(offsetX + x * cellSize + cellX + (offsetY + y * cellSize + cellY)
+                                                                  * bitmapData.Width) * 3 + 1];
+                            cellHash = 31 * cellHash + imageData[(offsetX + x * cellSize + cellX + (offsetY + y * cellSize + cellY)
+                                                                  * bitmapData.Width) * 3 + 2];
+                            /*for (int i = 0; i < texCount; i++)
+                            {
+                                Color col1 = Color.FromArgb(255, imageData[(offsetX + x * cellSize + cellX + (offsetY + y * cellSize + cellY) * bitmapData.Width) * 3],
+                                                  imageData[(offsetX + x * cellSize + cellX + (offsetY + y * cellSize + cellY) * bitmapData.Width) * 3 + 1],
+                                                  imageData[(offsetX + x * cellSize + cellX + (offsetY + y * cellSize + cellY) * bitmapData.Width) * 3 + 2]);
+                                Color col2 = textures.GetPixel(cellX, cellY + i * cellSize);
+                                if (Math.Abs(col1.R - col2.R) + Math.Abs(col1.G - col2.G)+ Math.Abs(col1.B - col2.B) > 5)
+                                {
+                                    diffs[i]++;
+                                }
+                            }*/
+                        }
+                    /*
+                    int best = int.MaxValue, id = 0;
+                    if (cellHash == 1693587486 || cellHash == -2143063590)
+                        Console.WriteLine($"hash: {cellHash}");
+                    for (int i = 0; i < texCount; i++)
+                    {
+                        if (cellHash == 1693587486 || cellHash == -2143063590)
+                            Console.WriteLine($"i = {i}, diff[i] = {diffs[i]}");
+                        if (diffs[i] < best)
+                        {
+                            best = diffs[i];
+                            id = i;
+                        }
+                    }
+                    if (!System.IO.File.Exists($"cells2/{cellHash}_{id}.png"))
+                        windowScreenShot.Clone(new Rectangle(x * cellSize + offsetX, y * cellSize + offsetY, cellSize, cellSize), System.Drawing.Imaging.PixelFormat.DontCare).Save($"cells2/{cellHash}_{id}.png");*/
+                    if (!System.IO.File.Exists($"cells2/{cellHash}.png"))
+                        windowScreenShot.Clone(new Rectangle(x * cellSize + offsetX, y * cellSize + offsetY, cellSize, cellSize), System.Drawing.Imaging.PixelFormat.DontCare).Save($"cells2/{cellHash}.png");
+                    cells[x, y] = ParseCell(cellHash);
+                }
+                /*
+            for (int x = 0; x < width; x++)
+                for (int y = 0; y < height; y++)
+                {
+                    Bitmap cell = windowScreenShot.Clone(new Rectangle(x * cellSize, y * cellSize, cellSize, cellSize), System.Drawing.Imaging.PixelFormat.DontCare);
+                    int diff = 0;
+                    for (int cellX = 0; cellX < cellSize; cellX++)
+                        for (int cellY = 0; cellY < cellSize; cellY++)
+                            if ()
+                }*/
+
+            return cells;
+        }
+
+        public bool IsDead()
+        {
+            throw new NotImplementedException();
+            //return windowScreenShot.GetPixel(windowScreenShot.Width / 2, 24).R == 0;
+        }
+
+        public bool IsReady()
+        {
+            throw new NotImplementedException();
+            //return windowScreenShot.GetPixel(windowScreenShot.Width / 2 - 5, 28).R == 0;
+        }
+
+        public void Click(int x, int y)
+        {
+            // TODO: wait while mouse not in rect
+            Console.WriteLine($"Click at {x} {y}");
+            WinApi.SetCursorPos(point.X + offsetX + x * cellSize + cellSize / 2, point.Y + offsetY + y * cellSize + cellSize / 2);
+            inputSimulator.Mouse.LeftButtonClick();
+        }
+
+        public void Mark(int x, int y)
+        {
+            // TODO: wait while mouse not in rect
+            Console.WriteLine($"Mark at {x} {y}");
+            WinApi.SetCursorPos(point.X + offsetX + x * cellSize + cellSize / 2, point.Y + offsetY + y * cellSize + cellSize / 2);
+            inputSimulator.Mouse.RightButtonClick();
+        }
+
+        public void Reset()
+        {
+            throw new NotImplementedException();
+            //WinApi.SetCursorPos(point.X + (rect.Right - rect.Left) / 2, point.Y + 28);
+            //inputSimulator.Mouse.LeftButtonClick();
         }
     }
 }

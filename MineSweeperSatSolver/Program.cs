@@ -1,5 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Diagnostics;
 using System.Drawing;
 using System.Runtime.InteropServices;
@@ -9,17 +12,27 @@ namespace MineSweeperSatSolver
 {
     internal class Program
     {
-        private static readonly Random random = new Random();
+        //private static readonly Random random = new Random();
 
         private static void Main(string[] args)
         {
             //UniversalMinesweeper.FindPattern("cells");
+            //UniversalMinesweeper.SaveDefaultConfig("config.txt");
             //return;
-            var game = new WindowsXpMinesweeper();
-            //var game = new UniversalMinesweeper();
-            var solver = new MixedSolver();
 
-            game.Reset();
+            var game = new WindowsXpMinesweeper();
+            //var game = new UniversalMinesweeper("config.txt");
+            var solver = new MixedSolver();
+            //System.Threading.Thread.Sleep(3000);
+            //while (game.FetchState() && !game.IsReady() && !game.IsDead())
+            //{
+            //    solver.Solve(game);
+            //}
+            //return;
+            
+            game.FetchState();
+            if (game.IsDead() || game.IsReady())
+                game.Reset();
 
             while (true)
             {
@@ -72,6 +85,14 @@ namespace MineSweeperSatSolver
         public int MinesAround { get; set; }
 
         public override string ToString() => $"{nameof(State)}: {State}, {nameof(MinesAround)}: {MinesAround}";
+        
+        public MinesweeperCell(string s)
+        {
+            State = CellState.Opened;
+            if (!int.TryParse(s, out int mines))
+                State = (CellState)Enum.Parse(typeof(CellState), s);
+            MinesAround = mines;
+        }
     }
 
     internal interface IMinesweeper // TODO: Move to other file
@@ -254,6 +275,8 @@ namespace MineSweeperSatSolver
 
         public bool IsDead()
         {
+            if (windowScreenShot.GetPixel(windowScreenShot.Width / 2, 24).R == 0)
+                Console.WriteLine("Dead!");
             return windowScreenShot.GetPixel(windowScreenShot.Width / 2, 24).R == 0;
         }
 
@@ -321,6 +344,15 @@ namespace MineSweeperSatSolver
         private readonly InputSimulator inputSimulator = new InputSimulator();
 
         public Bitmap windowScreenShot = null;
+        private int CellSize => configFile.CellSize;
+        private int Width => configFile.Width;
+        private int Height => configFile.Height;
+        private int OffsetX => configFile.OffsetX;
+        private int OffsetY => configFile.OffsetY;
+        private WinApi.Point Point => configFile.Point;
+        private WinApi.Rect Rect => configFile.Rect; // TODO: Extract data
+
+        /*
         private static int cellSize = 16; // TODO: remove static and load from config file
         private static int width = 30;
         private static int height = 16;
@@ -331,19 +363,82 @@ namespace MineSweeperSatSolver
         private WinApi.Point point = new WinApi.Point { X = 660, Y = 259 };
         //private WinApi.Point point = new WinApi.Point { X = 713, Y = 97 };
         //private WinApi.Point point = new WinApi.Point { X = 703, Y = 97 };
-        private WinApi.Rect rect = new WinApi.Rect { Left = 0, Top = 0, Right = width * cellSize + offsetX, Bottom = height * cellSize + offsetY };
-        public UniversalMinesweeper() // TODO: constructor from file
+        private WinApi.Rect rect = new WinApi.Rect { Left = 0, Top = 0, Right = width * cellSize + offsetX, Bottom = height * cellSize + offsetY };*/
+        private struct ConfigFile
         {
-            
+            public int CellSize { get; set; }
+            public int Width { get; set; }
+            public int Height { get; set; }
+            public int OffsetX { get; set; }
+            public int OffsetY { get; set; }
+            public WinApi.Point Point { get; set; }
+            [JsonIgnore]
+            public WinApi.Rect Rect { get; set; }
+            public Dictionary<string, List<int>> Hashes { get; set; }
+        }
+        private ConfigFile configFile;
+        private readonly string configPath;
+        private readonly Dictionary<int, MinesweeperCell> hashConverter;
+        public UniversalMinesweeper(string path) // TODO: constructor from file
+        {
+            configPath = path;
+            if (!File.Exists(path))
+                SaveDefaultConfig(path);
+            configFile = JsonSerializer.Deserialize<ConfigFile>(File.ReadAllText(path));
+            configFile.Rect = new WinApi.Rect
+            {
+                Left = 0,
+                Top = 0,
+                Right = Width * CellSize + OffsetX,
+                Bottom = Height * CellSize + OffsetY,
+            };
+            hashConverter = new Dictionary<int, MinesweeperCell>();
+            foreach (var kv in configFile.Hashes)
+            {
+                MinesweeperCell cell = new MinesweeperCell(kv.Key);
+                foreach (int element in kv.Value)
+                    hashConverter.Add(element, cell);
+            }
+        }
+        public static void SaveDefaultConfig(string path)
+        {
+            const int cellSize = 16, width = 30, height = 16, offsetX = 8, offsetY = 50;
+            File.WriteAllText(path, JsonSerializer.Serialize(new ConfigFile
+            {
+                CellSize = cellSize,
+                Width = width,
+                Height = height,
+                OffsetX = offsetX,
+                OffsetY = offsetY,
+                Point = new WinApi.Point { X = 660, Y = 259 },
+                Rect = new WinApi.Rect { Left = 0, Top = 0, Right = width * cellSize + offsetX, Bottom = height * cellSize + offsetY },
+                Hashes = new Dictionary<string, List<int>>
+                {
+                    { "Closed", new List<int>{ 560552706 } },
+                    { "Marked", new List<int>{ -91164671 } },
+                    { "BlownMine", new List<int>{ -1208559324 } },
+                    { "NoMine", new List<int>{ -1103832863 } },
+                    { "Mine", new List<int>{ -1668850496 } },
+                    { "0", new List<int>{ -2009844800 } },
+                    { "1", new List<int>{ 607173218 } },
+                    { "2", new List<int>{ -1150141824 } },
+                    { "3", new List<int>{ -1079452576 } },
+                    { "4", new List<int>{ -1475292224 } },
+                    { "5", new List<int>{ 792206272 } },
+                    { "6", new List<int>{ 139654080 } },
+                    { "7", new List<int>{ 1275880384 } },
+                    { "8", new List<int>{ 2067284928 } },
+                }
+            }, new JsonSerializerOptions { WriteIndented = true }));
         }
 
         public bool FetchState()
         {
-
-            windowScreenShot = new Bitmap(rect.Right - rect.Left, rect.Bottom - rect.Top);
+            System.Threading.Thread.Sleep(100);
+            windowScreenShot = new Bitmap(Rect.Right - Rect.Left, Rect.Bottom - Rect.Top);
             using var screenGraphics = Graphics.FromImage(windowScreenShot);
 
-            screenGraphics.CopyFromScreen(point.X, point.Y,
+            screenGraphics.CopyFromScreen(Point.X, Point.Y,
                 0, 0, new Size(windowScreenShot.Width, windowScreenShot.Height),
                 CopyPixelOperation.SourceCopy);
             windowScreenShot.Save("temp.png"); // Debug only
@@ -382,10 +477,10 @@ namespace MineSweeperSatSolver
             //    }
             //Console.WriteLine($"Count: {ans}/{saved.Width * saved.Height}");
             List<HashSet<Color>> list = new List<HashSet<Color>>();
-            foreach (string dir in System.IO.Directory.GetDirectories(path))
+            foreach (string dir in Directory.GetDirectories(path))
             {
                 HashSet<Color> rColors = null;
-                foreach (string filename in System.IO.Directory.GetFiles(dir))
+                foreach (string filename in Directory.GetFiles(dir))
                 {
                     Bitmap bitmap = new Bitmap(Image.FromFile(filename));
                     HashSet<Color> colors = new HashSet<Color>();
@@ -411,92 +506,14 @@ namespace MineSweeperSatSolver
                 Console.WriteLine($"i = {i}, ASize = {cur.Count}");
             }
         }
-        private static MinesweeperCell ParseCell(int cellHash) // TODO: Remove
+        private MinesweeperCell ParseCell(int cellHash)
         {
-            var cell = new MinesweeperCell();
-
-            switch (cellHash)
-            {
-                case 560552706:
-                case 869293688:
-                    cell.State = CellState.Closed;
-                    break;
-                case -91164671:
-                case 969498094:
-                    cell.State = CellState.Marked;
-                    break;
-                case -194541566:
-                    cell.State = CellState.QuestionMarked;
-                    break;
-                case -1208559324:
-                case 1608391983:
-                    cell.State = CellState.BlownMine;
-                    break;
-                case -1103832863:
-                    cell.State = CellState.NoMine;
-                    break;
-                case -1668850496:
-                    cell.State = CellState.Mine;
-                    break;
-                case -1887492416:
-                    cell.State = CellState.Question;
-                    break;
-                case 2067284928:
-                    cell.State = CellState.Opened;
-                    cell.MinesAround = 8;
-                    break;
-                case 1275880384:
-                    cell.State = CellState.Opened;
-                    cell.MinesAround = 7;
-                    break;
-                case 139654080:
-                    cell.State = CellState.Opened;
-                    cell.MinesAround = 6;
-                    break;
-                case 792206272:
-                case 683720862:
-                    cell.State = CellState.Opened;
-                    cell.MinesAround = 5;
-                    break;
-                case -1475292224:
-                case -1926047138:
-                    cell.State = CellState.Opened;
-                    cell.MinesAround = 4;
-                    break;
-                case -1079452576:
-                case 1693587486:
-                    cell.State = CellState.Opened;
-                    cell.MinesAround = 3;
-                    break;
-                case -1150141824:
-                case 1763429158:
-                    cell.State = CellState.Opened;
-                    cell.MinesAround = 2;
-                    break;
-                case 607173218:
-                case -2143063590:
-                case 1999011529:
-                case -795896909:
-                case -952361618:
-                    cell.State = CellState.Opened;
-                    cell.MinesAround = 1;
-                    break;
-                case -2009844800:
-                case -140630690:
-                case 1446996886:
-                    cell.State = CellState.Opened;
-                    cell.MinesAround = 0;
-                    break;
-                default:
-                    throw new Exception($"Unknown cell hash: {cellHash}");
-            }
-
-            return cell;
+            return hashConverter[cellHash];
         }
 
         public MinesweeperCell[,] GetField()
         {
-            var cells = new MinesweeperCell[width, height];
+            var cells = new MinesweeperCell[Width, Height];
 
             var imageData = new byte[sizeof(byte) * 3 * windowScreenShot.Width * windowScreenShot.Height];
             var bitmapData = windowScreenShot.LockBits(new Rectangle(0, 0, windowScreenShot.Width, windowScreenShot.Height),
@@ -509,19 +526,19 @@ namespace MineSweeperSatSolver
             //var height = cells.GetLength(1);
             //Bitmap textures = new Bitmap(Image.FromFile("410.bmp"));
             //int texCount = textures.Height / cellSize;
-            for (var x = 0; x < width; x++)
-                for (var y = 0; y < height; y++)
+            for (var x = 0; x < Width; x++)
+                for (var y = 0; y < Height; y++)
                 {
                     var cellHash = 0;
                     //int[] diffs = new int[texCount];
-                    for (var cellX = 0; cellX < cellSize; cellX++)
-                        for (var cellY = 0; cellY < cellSize; cellY++)
+                    for (var cellX = 0; cellX < CellSize; cellX++)
+                        for (var cellY = 0; cellY < CellSize; cellY++)
                         {
-                            cellHash = 31 * cellHash + imageData[(offsetX + x * cellSize + cellX + (offsetY + y * cellSize + cellY)
+                            cellHash = 31 * cellHash + imageData[(OffsetX + x * CellSize + cellX + (OffsetY + y * CellSize + cellY)
                                                                   * bitmapData.Width) * 3];
-                            cellHash = 31 * cellHash + imageData[(offsetX + x * cellSize + cellX + (offsetY + y * cellSize + cellY)
+                            cellHash = 31 * cellHash + imageData[(OffsetX + x * CellSize + cellX + (OffsetY + y * CellSize + cellY)
                                                                   * bitmapData.Width) * 3 + 1];
-                            cellHash = 31 * cellHash + imageData[(offsetX + x * cellSize + cellX + (offsetY + y * cellSize + cellY)
+                            cellHash = 31 * cellHash + imageData[(OffsetX + x * CellSize + cellX + (OffsetY + y * CellSize + cellY)
                                                                   * bitmapData.Width) * 3 + 2];
                             /*for (int i = 0; i < texCount; i++)
                             {
@@ -549,10 +566,20 @@ namespace MineSweeperSatSolver
                             id = i;
                         }
                     }
-                    if (!System.IO.File.Exists($"cells2/{cellHash}_{id}.png"))
+                    if (!File.Exists($"cells2/{cellHash}_{id}.png"))
                         windowScreenShot.Clone(new Rectangle(x * cellSize + offsetX, y * cellSize + offsetY, cellSize, cellSize), System.Drawing.Imaging.PixelFormat.DontCare).Save($"cells2/{cellHash}_{id}.png");*/
-                    if (!System.IO.File.Exists($"cells2/{cellHash}.png"))
-                        windowScreenShot.Clone(new Rectangle(x * cellSize + offsetX, y * cellSize + offsetY, cellSize, cellSize), System.Drawing.Imaging.PixelFormat.DontCare).Save($"cells2/{cellHash}.png");
+                    if (!hashConverter.ContainsKey(cellHash))// && !File.Exists($"cells2/{cellHash}.png"))
+                    {
+                        windowScreenShot.Clone(new Rectangle(x * CellSize + OffsetX, y * CellSize + OffsetY, CellSize, CellSize), System.Drawing.Imaging.PixelFormat.DontCare).Save($"cells2/{cellHash}.png");
+                        Console.Write($"Unknown hash: {cellHash}, Enter his value: "); // TODO: Normal handling this case
+                        string cell = Console.ReadLine();
+                        hashConverter.Add(cellHash, new MinesweeperCell(cell));
+                        if (!configFile.Hashes.ContainsKey(cell))
+                            configFile.Hashes.Add(cell, new List<int>());
+                        configFile.Hashes[cell].Add(cellHash);
+                        File.WriteAllText(configPath, JsonSerializer.Serialize(configFile, new JsonSerializerOptions { WriteIndented = true }));
+                        File.Move($"cells2/{cellHash}.png", $"cells2/saved/{cellHash}.png");
+                    }
                     cells[x, y] = ParseCell(cellHash);
                 }
                 /*
@@ -571,13 +598,27 @@ namespace MineSweeperSatSolver
 
         public bool IsDead()
         {
-            throw new NotImplementedException();
+            var field = GetField();
+            for (int x = 0; x < Width; x++)
+                for (int y = 0; y < Height; y++)
+                    if (field[x, y].State == CellState.BlownMine || field[x, y].State == CellState.NoMine || field[x, y].State == CellState.Mine)
+                        return true;
+            return false;
+
+            //throw new NotImplementedException();
             //return windowScreenShot.GetPixel(windowScreenShot.Width / 2, 24).R == 0;
         }
 
         public bool IsReady()
         {
-            throw new NotImplementedException();
+            var field = GetField();
+            for (int x = 0; x < Width; x++)
+                for (int y = 0; y < Height; y++)
+                    if (field[x, y].State == CellState.Closed)
+                        return false;
+            return true;
+
+            //throw new NotImplementedException();
             //return windowScreenShot.GetPixel(windowScreenShot.Width / 2 - 5, 28).R == 0;
         }
 
@@ -585,7 +626,7 @@ namespace MineSweeperSatSolver
         {
             // TODO: wait while mouse not in rect
             Console.WriteLine($"Click at {x} {y}");
-            WinApi.SetCursorPos(point.X + offsetX + x * cellSize + cellSize / 2, point.Y + offsetY + y * cellSize + cellSize / 2);
+            WinApi.SetCursorPos(Point.X + OffsetX + x * CellSize + CellSize / 2, Point.Y + OffsetY + y * CellSize + CellSize / 2);
             inputSimulator.Mouse.LeftButtonClick();
         }
 
@@ -593,7 +634,7 @@ namespace MineSweeperSatSolver
         {
             // TODO: wait while mouse not in rect
             Console.WriteLine($"Mark at {x} {y}");
-            WinApi.SetCursorPos(point.X + offsetX + x * cellSize + cellSize / 2, point.Y + offsetY + y * cellSize + cellSize / 2);
+            WinApi.SetCursorPos(Point.X + OffsetX + x * CellSize + CellSize / 2, Point.Y + OffsetY + y * CellSize + CellSize / 2);
             inputSimulator.Mouse.RightButtonClick();
         }
 

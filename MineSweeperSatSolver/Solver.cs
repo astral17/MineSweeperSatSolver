@@ -321,7 +321,11 @@ namespace MineSweeperSatSolver
                     if (solutions.MineHits[x, y] != solutions.TotalSolutions)
                         continue;
 
-                    game.Mark(x, y);
+                    if (field[x,y].State != CellState.Marked)
+                    {
+                        game.Mark(x, y);
+                        field[x, y].State = CellState.Marked;
+                    }
                     wasChanged = true;
                 }
 
@@ -329,6 +333,7 @@ namespace MineSweeperSatSolver
                 return true;
 
             var minimalPoint = new Point(-1, -1);
+            var maximalPoint = new Point(-1, -1);
 
             for (var y = 0; y < height; y++)
             {
@@ -338,12 +343,16 @@ namespace MineSweeperSatSolver
                         continue;
                     if (minimalPoint.X == -1 || solutions.MineHits[minimalPoint.X, minimalPoint.Y] > solutions.MineHits[x, y]) // TODO: Or Mark point if chance better
                         minimalPoint = new Point(x, y);
+                    if (maximalPoint.X == -1 || solutions.MineHits[maximalPoint.X, maximalPoint.Y] < solutions.MineHits[x, y]) // TODO: Or Mark point if chance better
+                        maximalPoint = new Point(x, y);
                 }
             }
 
             if (minimalPoint.X != -1)
                 Console.WriteLine(
                     $"Chance hit at {minimalPoint.X}:{minimalPoint.Y} {100.0 * solutions.MineHits[minimalPoint.X, minimalPoint.Y] / solutions.TotalSolutions:0.00}%");
+            if (maximalPoint.X != -1)
+                Console.WriteLine($"And max chance is {100.0 * solutions.MineHits[maximalPoint.X, maximalPoint.Y] / solutions.TotalSolutions:0.00}%");
 
             if (minimalPoint.X == -1)
             {
@@ -362,7 +371,12 @@ namespace MineSweeperSatSolver
                 game.Click(point.X, point.Y);
             }
             else
-                game.Click(minimalPoint.X, minimalPoint.Y);
+            {
+                if ((1 - solutions.MineHits[maximalPoint.X, maximalPoint.Y] * 1.0 / solutions.TotalSolutions) * 2 <= solutions.MineHits[minimalPoint.X, minimalPoint.Y] * 1.0 / solutions.TotalSolutions)
+                    game.Mark(maximalPoint.X, maximalPoint.Y);
+                else
+                    game.Click(minimalPoint.X, minimalPoint.Y);
+            }
             return true;
         }
     }

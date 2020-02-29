@@ -321,11 +321,7 @@ namespace MineSweeperSatSolver
                     if (solutions.MineHits[x, y] != solutions.TotalSolutions)
                         continue;
 
-                    if (field[x,y].State != CellState.Marked)
-                    {
-                        game.Mark(x, y);
-                        field[x, y].State = CellState.Marked;
-                    }
+                    game.Mark(x, y);
                     wasChanged = true;
                 }
 
@@ -388,7 +384,7 @@ namespace MineSweeperSatSolver
         {
             if (groupSolver.Solve(game))
                 return true;
-            game.FetchState();
+            game.FetchState(); // TODO: Sync marked cells
             return satSolver.Solve(game);
         }
     }

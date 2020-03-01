@@ -4,12 +4,13 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Linq;
 using Google.OrTools.Sat;
+using MineSweeperSatSolver.Adapters;
 
-namespace MineSweeperSatSolver
+namespace MineSweeperSatSolver.Solvers
 {
     internal interface IMinesweeperSolver
     {
-        bool Solve(IMinesweeper game);
+        bool Solve(IMinesweeperAdapter game);
     }
     internal class GroupSolver : IMinesweeperSolver
     {
@@ -22,7 +23,7 @@ namespace MineSweeperSatSolver
                 this.mineCount = mineCount;
             }
         }
-        public bool Solve(IMinesweeper game)
+        public bool Solve(IMinesweeperAdapter game)
         {
             Console.WriteLine("GroupSolver");
             MinesweeperCell[,] field = game.GetField();
@@ -230,7 +231,7 @@ namespace MineSweeperSatSolver
                     }
             }
         }
-        public bool Solve(IMinesweeper game)
+        public bool Solve(IMinesweeperAdapter game)
         {
             Console.WriteLine("SatSolver");
             var field = game.GetField();
@@ -380,7 +381,7 @@ namespace MineSweeperSatSolver
     {
         private readonly GroupSolver groupSolver = new GroupSolver();
         private readonly SatSolver satSolver = new SatSolver();
-        public bool Solve(IMinesweeper game)
+        public bool Solve(IMinesweeperAdapter game)
         {
             if (groupSolver.Solve(game))
                 return true;

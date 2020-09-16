@@ -46,23 +46,8 @@ namespace MineSweeperSatSolver.Adapters
         {
             if (!WinApi.SetForegroundWindow(windowHandle))
                 throw new Exception("Could not set foreground window");
-            if (!WinApi.GetClientRect(windowHandle, out var rect))
-                throw new Exception("Could not get window rect");
-            var point = new WinApi.Point
-            {
-                X = rect.Left,
-                Y = rect.Top
-            };
-            if (!WinApi.ClientToScreen(windowHandle, ref point))
-                throw new Exception("Could not get client point");
-
-            windowScreenShot =
-                new Bitmap(rect.Right - rect.Left, rect.Bottom - rect.Top);
-            using var screenGraphics = Graphics.FromImage(windowScreenShot);
-
-            screenGraphics.CopyFromScreen(point.X, point.Y,
-                0, 0, new Size(windowScreenShot.Width, windowScreenShot.Height),
-                CopyPixelOperation.SourceCopy);
+            windowScreenShot = WinApi.CaptureClientRect(windowHandle);
+            //File.Move("temp.png", "prev.png", true);
             //windowScreenShot.Save("temp.png"); // Debug only
             return true;
         }
@@ -94,10 +79,12 @@ namespace MineSweeperSatSolver.Adapters
                     cell.MinesAround = 7;
                     break;
                 case -1480603107:
+                case 1469672472:
                     cell.State = CellState.Opened;
                     cell.MinesAround = 6;
                     break;
                 case 1024099743:
+                case -86935384:
                     cell.State = CellState.Opened;
                     cell.MinesAround = 5;
                     break;
@@ -106,14 +93,17 @@ namespace MineSweeperSatSolver.Adapters
                     cell.MinesAround = 4;
                     break;
                 case 71982584:
+                case -751177451:
                     cell.State = CellState.Opened;
                     cell.MinesAround = 3;
                     break;
                 case 1659313554:
+                case -1343137813:
                     cell.State = CellState.Opened;
                     cell.MinesAround = 2;
                     break;
                 case -277149828:
+                case -1240226816:
                     cell.State = CellState.Opened;
                     cell.MinesAround = 1;
                     break;
@@ -159,11 +149,14 @@ namespace MineSweeperSatSolver.Adapters
                             cellHash = 31 * cellHash + imageData[(OffsetX + x * CellSize + cellX + (OffsetY + y * CellSize + cellY)
                                                                   * bitmapData.Width) * 3 + 2];
                         }
-                    //if (!Directory.Exists($"cells_tmp/"))
-                    //    Directory.CreateDirectory($"cells_tmp");
-                    //windowScreenShot.Clone(new Rectangle(x * CellSize + OffsetX, y * CellSize + OffsetY, CellSize, CellSize),
-                    //        System.Drawing.Imaging.PixelFormat.DontCare).Save($"cells_tmp/{cellHash}.png");
                     cells[x, y] = ParseCell(cellHash);
+                    //if (cells[x, y].State == CellState.Unknown)
+                    //{
+                    //    if (!System.IO.Directory.Exists($"cells_tmp/"))
+                    //        System.IO.Directory.CreateDirectory($"cells_tmp");
+                    //    windowScreenShot.Clone(new Rectangle(x * CellSize + OffsetX, y * CellSize + OffsetY, CellSize, CellSize),
+                    //            System.Drawing.Imaging.PixelFormat.DontCare).Save($"cells_tmp/{cellHash}.png");
+                    //}
                 }
 
             return cells;
@@ -212,6 +205,7 @@ namespace MineSweeperSatSolver.Adapters
             WinApi.SetCursorPos(point.X + OffsetX + x * CellSize + CellSize / 2,
                 point.Y + OffsetY + y * CellSize + CellSize / 2);
             inputSimulator.Mouse.LeftButtonClick();
+            System.Threading.Thread.Sleep(1);
         }
 
         public void Mark(int x, int y)
@@ -230,6 +224,7 @@ namespace MineSweeperSatSolver.Adapters
             WinApi.SetCursorPos(point.X + OffsetX + x * CellSize + CellSize / 2,
                 point.Y + OffsetY + y * CellSize + CellSize / 2);
             inputSimulator.Mouse.RightButtonClick();
+            System.Threading.Thread.Sleep(1);
         }
 
         public void Reset()

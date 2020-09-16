@@ -43,23 +43,7 @@ namespace MineSweeperSatSolver.Adapters
         {
             if (!WinApi.SetForegroundWindow(windowHandle))
                 throw new Exception("Could not set foreground window");
-            if (!WinApi.GetClientRect(windowHandle, out var rect))
-                throw new Exception("Could not get window rect");
-            var point = new WinApi.Point
-            {
-                X = rect.Left,
-                Y = rect.Top
-            };
-            if (!WinApi.ClientToScreen(windowHandle, ref point))
-                throw new Exception("Could not get client point");
-
-            windowScreenShot =
-                new Bitmap(rect.Right - rect.Left, rect.Bottom - rect.Top);
-            using var screenGraphics = Graphics.FromImage(windowScreenShot);
-
-            screenGraphics.CopyFromScreen(point.X, point.Y,
-                0, 0, new Size(windowScreenShot.Width, windowScreenShot.Height),
-                CopyPixelOperation.SourceCopy);
+            windowScreenShot = WinApi.CaptureClientRect(windowHandle);
             //windowScreenShot.Save("temp.png");
             return true;
         }

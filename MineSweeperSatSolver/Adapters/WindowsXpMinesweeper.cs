@@ -182,6 +182,7 @@ namespace MineSweeperSatSolver.Adapters
             WinApi.SetCursorPos(point.X + OffsetX + x * CellSize + CellSize / 2,
                 point.Y + OffsetY + y * CellSize + CellSize / 2);
             inputSimulator.Mouse.LeftButtonClick();
+            System.Threading.Thread.Sleep(5);
         }
 
         public void Mark(int x, int y)
@@ -200,6 +201,7 @@ namespace MineSweeperSatSolver.Adapters
             WinApi.SetCursorPos(point.X + OffsetX + x * CellSize + CellSize / 2,
                 point.Y + OffsetY + y * CellSize + CellSize / 2);
             inputSimulator.Mouse.RightButtonClick();
+            System.Threading.Thread.Sleep(5);
         }
 
         public void Reset()
@@ -217,6 +219,7 @@ namespace MineSweeperSatSolver.Adapters
                 throw new Exception("Could not get client point");
             WinApi.SetCursorPos(point.X + (rect.Right - rect.Left) / 2, point.Y + 28);
             inputSimulator.Mouse.LeftButtonClick();
+            System.Threading.Thread.Sleep(100);
         }
     }
 }

@@ -58,56 +58,51 @@ namespace MineSweeperSatSolver.Adapters
 
             switch (cellHash)
             {
-                case -1353029886:
+                case -1689182622:
                     cell.State = CellState.Closed;
                     break;
-                case 2003012210:
+                case 1710436302:
                     cell.State = CellState.Marked;
                     break;
-                case -1838076266:
+                case 1376611874:
                     cell.State = CellState.BlownMine;
                     break;
                 //case -1668850496:
                 //    cell.State = CellState.Mine;
                 //    break;
-                case -892136958:
+                case 1383575618:
                     cell.State = CellState.Opened;
                     cell.MinesAround = 8;
                     break;
-                case 1923235105:
+                case 293750169:
                     cell.State = CellState.Opened;
                     cell.MinesAround = 7;
                     break;
-                case -1480603107:
-                case 1469672472:
+                case 1827000976:
                     cell.State = CellState.Opened;
                     cell.MinesAround = 6;
                     break;
-                case 1024099743:
-                case -86935384:
+                case 1720911494:
                     cell.State = CellState.Opened;
                     cell.MinesAround = 5;
                     break;
-                case 1927950246:
+                case -479560260:
                     cell.State = CellState.Opened;
                     cell.MinesAround = 4;
                     break;
-                case 71982584:
-                case -751177451:
+                case 2044887759:
                     cell.State = CellState.Opened;
                     cell.MinesAround = 3;
                     break;
-                case 1659313554:
-                case -1343137813:
+                case 1951330919:
                     cell.State = CellState.Opened;
                     cell.MinesAround = 2;
                     break;
-                case -277149828:
-                case -1240226816:
+                case 598363370:
                     cell.State = CellState.Opened;
                     cell.MinesAround = 1;
                     break;
-                case 355102988:
+                case -1003835988:
                     cell.State = CellState.Opened;
                     cell.MinesAround = 0;
                     break;
@@ -125,10 +120,12 @@ namespace MineSweeperSatSolver.Adapters
             var cells = new MinesweeperCell[(windowScreenShot.Width - ExtraWidth) / CellSize,
                 (windowScreenShot.Height - ExtraHeight) / CellSize];
 
-            var imageData = new byte[sizeof(byte) * 3 * windowScreenShot.Width * windowScreenShot.Height];
+            //var imageData = new byte[sizeof(byte) * 3 * windowScreenShot.Width * windowScreenShot.Height];
+
             var bitmapData = windowScreenShot.LockBits(new Rectangle(0, 0, windowScreenShot.Width, windowScreenShot.Height),
                 System.Drawing.Imaging.ImageLockMode.ReadOnly,
                 System.Drawing.Imaging.PixelFormat.Format24bppRgb);
+            var imageData = new byte[sizeof(byte) * bitmapData.Stride * windowScreenShot.Height];
             Marshal.Copy(bitmapData.Scan0, imageData, 0, imageData.Length);
             windowScreenShot.UnlockBits(bitmapData);
 
@@ -138,24 +135,24 @@ namespace MineSweeperSatSolver.Adapters
             for (var x = 0; x < width; x++)
                 for (var y = 0; y < height; y++)
                 {
-                    var cellHash = 0;
+                    int cellHash = 0;
                     for (var cellX = 0; cellX < CellSize; cellX++)
                         for (var cellY = 0; cellY < CellSize; cellY++)
                         {
-                            cellHash = 31 * cellHash + imageData[(OffsetX + x * CellSize + cellX + (OffsetY + y * CellSize + cellY)
-                                                                  * bitmapData.Width) * 3];
-                            cellHash = 31 * cellHash + imageData[(OffsetX + x * CellSize + cellX + (OffsetY + y * CellSize + cellY)
-                                                                  * bitmapData.Width) * 3 + 1];
-                            cellHash = 31 * cellHash + imageData[(OffsetX + x * CellSize + cellX + (OffsetY + y * CellSize + cellY)
-                                                                  * bitmapData.Width) * 3 + 2];
+                            cellHash = 257 * cellHash + imageData[(OffsetX + x * CellSize + cellX) * 3 + (OffsetY + y * CellSize + cellY)
+                                                                      * bitmapData.Stride];
+                            cellHash = 257 * cellHash + imageData[(OffsetX + x * CellSize + cellX) * 3 + (OffsetY + y * CellSize + cellY)
+                                                                      * bitmapData.Stride + 1];
+                            cellHash = 257 * cellHash + imageData[(OffsetX + x * CellSize + cellX) * 3 + (OffsetY + y * CellSize + cellY)
+                                                                      * bitmapData.Stride + 2];
                         }
                     cells[x, y] = ParseCell(cellHash);
                     //if (cells[x, y].State == CellState.Unknown)
                     //{
-                    //    if (!System.IO.Directory.Exists($"cells_tmp/"))
-                    //        System.IO.Directory.CreateDirectory($"cells_tmp");
+                    //    if (!System.IO.Directory.Exists($"cells_tmp2/"))
+                    //        System.IO.Directory.CreateDirectory($"cells_tmp2");
                     //    windowScreenShot.Clone(new Rectangle(x * CellSize + OffsetX, y * CellSize + OffsetY, CellSize, CellSize),
-                    //            System.Drawing.Imaging.PixelFormat.DontCare).Save($"cells_tmp/{cellHash}.png");
+                    //            System.Drawing.Imaging.PixelFormat.DontCare).Save($"cells_tmp2/{cellHash}.png");
                     //}
                 }
 
@@ -255,7 +252,7 @@ namespace MineSweeperSatSolver.Adapters
             //WinApi.SetCursorPos(point.X + 15, point.Y - 5);
             //inputSimulator.Mouse.LeftButtonClick();
             //System.Threading.Thread.Sleep(50);
-            //WinApi.SetCursorPos(point.X + 15, point.Y + 250);
+            //WinApi.SetCursorPos(point.X + 15, point.Y + 245);
             //inputSimulator.Mouse.LeftButtonClick();
             //System.Threading.Thread.Sleep(200);
         }

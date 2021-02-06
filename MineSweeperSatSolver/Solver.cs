@@ -39,7 +39,7 @@ namespace MineSweeperSatSolver.Solvers
                             for (int dy = -1; dy <= 1; dy++)
                                 if (0 <= i + dx && i + dx < width && 0 <= j + dy && j + dy < height && field[i + dx, j + dy].State == CellState.Closed)
                                 {
-                                    Console.WriteLine($"Popados at {i + dx} {i + dy}"); // If around zero cell has closed cell
+                                    Console.WriteLine($"Not Expanded at {i + dx} {i + dy}"); // If around zero cell has closed cell
                                     return false;
                                 }
                     }
@@ -231,6 +231,11 @@ namespace MineSweeperSatSolver.Solvers
                     }
             }
         }
+        private readonly bool safeMode;
+        public SatSolver(bool safeMode = false)
+        {
+            this.safeMode = safeMode;
+        }
         public bool Solve(IMinesweeperAdapter game)
         {
             Console.WriteLine("SatSolver");
@@ -296,7 +301,7 @@ namespace MineSweeperSatSolver.Solvers
                     {
                         variables += solutions.Variables[x, y] != null ? 1 : 0;
                     }
-
+                // TODO: set time limit
                 Console.Write($"Variables: {variables}, Equations: {equations}, Result: ");
                 Console.Out.Flush();
             }
@@ -351,6 +356,9 @@ namespace MineSweeperSatSolver.Solvers
             if (maximalPoint.X != -1)
                 Console.WriteLine($"And max chance is {100.0 * solutions.MineHits[maximalPoint.X, maximalPoint.Y] / solutions.TotalSolutions:0.00}%");
 
+            if (safeMode)
+                return false;
+
             if (minimalPoint.X == -1)
             {
                 var possiblePoints = new List<Point>();
@@ -379,8 +387,13 @@ namespace MineSweeperSatSolver.Solvers
     }
     internal class MixedSolver : IMinesweeperSolver // Or move execute GroupSolver to SatSolver
     {
-        private readonly GroupSolver groupSolver = new GroupSolver();
-        private readonly SatSolver satSolver = new SatSolver();
+        private readonly GroupSolver groupSolver;
+        private readonly SatSolver satSolver;
+        public MixedSolver(bool safeMode = false)
+        {
+            groupSolver = new GroupSolver();
+            satSolver = new SatSolver(safeMode);
+        }
         public bool Solve(IMinesweeperAdapter game)
         {
             if (groupSolver.Solve(game))

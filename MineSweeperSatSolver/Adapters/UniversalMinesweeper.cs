@@ -216,10 +216,10 @@ namespace MineSweeperSatSolver.Adapters
         {
             var cells = new MinesweeperCell[Width, Height];
 
-            var imageData = new byte[sizeof(byte) * 3 * windowScreenShot.Width * windowScreenShot.Height];
             var bitmapData = windowScreenShot.LockBits(new Rectangle(0, 0, windowScreenShot.Width, windowScreenShot.Height),
                 System.Drawing.Imaging.ImageLockMode.ReadOnly,
                 System.Drawing.Imaging.PixelFormat.Format24bppRgb);
+            var imageData = new byte[sizeof(byte) * bitmapData.Stride * windowScreenShot.Height];
             Marshal.Copy(bitmapData.Scan0, imageData, 0, imageData.Length);
             windowScreenShot.UnlockBits(bitmapData);
 
@@ -239,12 +239,26 @@ namespace MineSweeperSatSolver.Adapters
                     for (var cellX = HashRect.Left; cellX < HashRect.Right; cellX++)
                         for (var cellY = HashRect.Top; cellY < HashRect.Bottom; cellY++)
                         {
-                            cellHash = 257 * cellHash + imageData[(OffsetX + x * CellSize + cellX + (OffsetY + y * CellSize + cellY)
-                                                                  * bitmapData.Width) * 3];
-                            cellHash = 257 * cellHash + imageData[(OffsetX + x * CellSize + cellX + (OffsetY + y * CellSize + cellY)
-                                                                  * bitmapData.Width) * 3 + 1];
-                            cellHash = 257 * cellHash + imageData[(OffsetX + x * CellSize + cellX + (OffsetY + y * CellSize + cellY)
-                                                                  * bitmapData.Width) * 3 + 2];
+                            //if (true)//cellX == HashRect.Left + 1 && cellY == HashRect.Top + 1)
+                            //{
+                            //    Console.WriteLine("r: {0}, g: {1}, b: {2}",
+                            //        imageData[(OffsetX + x * CellSize + cellX) * 3 + (OffsetY + y * CellSize + cellY)
+                            //                                          * bitmapData.Stride],
+                            //        imageData[(OffsetX + x * CellSize + cellX) * 3 + (OffsetY + y * CellSize + cellY)
+                            //                                          * bitmapData.Stride + 1],
+                            //        imageData[(OffsetX + x * CellSize + cellX) * 3 + (OffsetY + y * CellSize + cellY)
+                            //                                          * bitmapData.Stride + 2]);
+                            //}
+                            cellHash = 257 * cellHash + imageData[(OffsetX + x * CellSize + cellX) * 3 + (OffsetY + y * CellSize + cellY)
+                                                                      * bitmapData.Stride];
+                            cellHash = 257 * cellHash + imageData[(OffsetX + x * CellSize + cellX) * 3 + (OffsetY + y * CellSize + cellY)
+                                                                      * bitmapData.Stride + 1];
+                            cellHash = 257 * cellHash + imageData[(OffsetX + x * CellSize + cellX) * 3 + (OffsetY + y * CellSize + cellY)
+                                                                      * bitmapData.Stride + 2];
+
+                            //red = Math.Max(red, imageData[(OffsetX + x * CellSize + cellX + (OffsetY + y * CellSize + cellY) * bitmapData.Width) * 3]);
+                            //green = Math.Max(green, imageData[(OffsetX + x * CellSize + cellX + (OffsetY + y * CellSize + cellY) * bitmapData.Width) * 3 + 1]);
+                            //blue = Math.Max(blue, imageData[(OffsetX + x * CellSize + cellX + (OffsetY + y * CellSize + cellY) * bitmapData.Width) * 3 + 2]);
 
                             //Color color = Color.FromArgb(255, imageData[(OffsetX + x * CellSize + cellX + (OffsetY + y * CellSize + cellY) * bitmapData.Width) * 3 + 2],
                             //                      imageData[(OffsetX + x * CellSize + cellX + (OffsetY + y * CellSize + cellY) * bitmapData.Width) * 3 + 1],
@@ -268,6 +282,7 @@ namespace MineSweeperSatSolver.Adapters
                                 }
                             }*/
                         }
+                    //cellHash = red * 256 * 256 + green * 256 + blue;
                     if (saved)
                     {
                         string name = found.State == CellState.Opened ? found.MinesAround.ToString() : found.State.ToString();
@@ -299,7 +314,7 @@ namespace MineSweeperSatSolver.Adapters
                     //    windowScreenShot.Clone(new Rectangle(x * CellSize + OffsetX + HashRect.Left, y * CellSize + OffsetY + HashRect.Top,
                     //        HashRect.Right - HashRect.Left, HashRect.Bottom - HashRect.Top),
                     //        System.Drawing.Imaging.PixelFormat.DontCare).Save($"cells/{cellHash}_WTF.png");
-                    if (!hashConverter.ContainsKey(cellHash))// && !File.Exists($"cells2/{cellHash}.png"))
+                    if (false && !hashConverter.ContainsKey(cellHash))// && !File.Exists($"cells2/{cellHash}.png"))
                     {
                         //windowScreenShot.Clone(new Rectangle(x * CellSize + OffsetX, y * CellSize + OffsetY, CellSize, CellSize), System.Drawing.Imaging.PixelFormat.DontCare).Save($"cells/{cellHash}.png");
                         windowScreenShot.Clone(new Rectangle(x * CellSize + OffsetX + HashRect.Left, y * CellSize + OffsetY + HashRect.Top,
@@ -317,6 +332,9 @@ namespace MineSweeperSatSolver.Adapters
                             Directory.CreateDirectory($"cells/saved/{cell}");
                         File.Move($"cells/{cellHash}.png", $"cells/saved/{cell}/{cellHash}.png", true);
                     }
+                    if (!hashConverter.ContainsKey(cellHash))
+                        cells[x, y] = new MinesweeperCell("Mine");
+                    else
                     cells[x, y] = ParseCell(cellHash);
                     if (cells[x, y].State == CellState.Mine)
                         return cells;
@@ -343,9 +361,6 @@ namespace MineSweeperSatSolver.Adapters
                     if (field[x, y].State == CellState.BlownMine || field[x, y].State == CellState.NoMine || field[x, y].State == CellState.Mine)
                         return true;
             return false;
-
-            //throw new NotImplementedException();
-            //return windowScreenShot.GetPixel(windowScreenShot.Width / 2, 24).R == 0;
         }
 
         public bool IsReady()
@@ -356,27 +371,27 @@ namespace MineSweeperSatSolver.Adapters
                     if (field[x, y].State == CellState.Closed)
                         return false;
             return true;
-
-            //throw new NotImplementedException();
-            //return windowScreenShot.GetPixel(windowScreenShot.Width / 2 - 5, 28).R == 0;
         }
 
         public void Click(int x, int y)
         {
+            return;
             // TODO: wait while mouse not in rect
             Console.WriteLine($"Click at {x} {y}");
-            WinApi.SetCursorPos(Point.X + OffsetX + x * CellSize + CellSize / 2, Point.Y + OffsetY + y * CellSize + CellSize / 2);
+            //WinApi.SetCursorPos(Point.X + OffsetX + x * CellSize + CellSize / 2, Point.Y + OffsetY + y * CellSize + CellSize / 2);
+            WinApi.SetCursorPos((int)((Point.X + OffsetX + x * CellSize + CellSize / 2) / 1.25), (int)((Point.Y + OffsetY + y * CellSize + CellSize / 2) / 1.25));
             inputSimulator.Mouse.LeftButtonClick();
-            System.Threading.Thread.Sleep(5);
+            System.Threading.Thread.Sleep(500);
         }
 
         public void Mark(int x, int y)
         {
             // TODO: wait while mouse not in rect
             Console.WriteLine($"Mark at {x} {y}");
-            WinApi.SetCursorPos(Point.X + OffsetX + x * CellSize + CellSize / 2, Point.Y + OffsetY + y * CellSize + CellSize / 2);
+            //WinApi.SetCursorPos(Point.X + OffsetX + x * CellSize + CellSize / 2, Point.Y + OffsetY + y * CellSize + CellSize / 2);
+            WinApi.SetCursorPos((int)((Point.X + OffsetX + x * CellSize + CellSize / 2) / 1.25), (int)((Point.Y + OffsetY + y * CellSize + CellSize / 2) / 1.25));
             inputSimulator.Mouse.RightButtonClick();
-            System.Threading.Thread.Sleep(5);
+            System.Threading.Thread.Sleep(100);
         }
 
         public void Reset()
